@@ -63,7 +63,7 @@ button{cursor:pointer}
 .list{display:grid;gap:12px;margin-bottom:24px}
 
 /* task rows */
-.task{position:relative;display:grid;grid-template-columns:76px minmax(0,1fr) auto;align-items:center;min-height:80px;background:var(--surface);border-radius:16px;overflow:hidden}
+.task{position:relative;display:grid;grid-template-columns:76px minmax(0,1fr) auto 48px;align-items:center;min-height:80px;background:var(--surface);border-radius:16px;overflow:hidden}
 .check{align-self:stretch;border:0;display:grid;place-items:center;background:var(--c);transition:background .2s}
 .check .box{width:44px;height:44px;border-radius:10px;background:rgba(0,0,0,.22);display:grid;place-items:center}
 .check svg{width:26px;height:26px;opacity:0;transform:scale(.6);transition:.2s}
@@ -75,7 +75,14 @@ button{cursor:pointer}
 .task-meta{color:var(--muted);font-size:.85rem;margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
 .task-meta .pts{color:var(--coin);font-weight:600}
 .task.is-done .task-meta .pts{color:var(--dim)}
-.badge{margin-right:16px;background:#8f8c9b;color:#fff;border-radius:8px;padding:6px 10px;text-align:center;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums;min-width:44px}
+.grip{grid-column:4;align-self:stretch;border:0;background:none;color:var(--dim);display:grid;place-items:center;touch-action:none;cursor:grab;padding:0}
+.grip svg{width:22px;height:22px;fill:currentColor}
+.grip:active{cursor:grabbing;color:var(--fg)}
+.task.dragging{z-index:3;box-shadow:0 12px 28px rgba(0,0,0,.5);outline:2px solid var(--violet);transition:none}
+.task.dragging .grip{color:var(--fg)}
+.task.shift{transition:transform .15s ease}
+body.is-dragging{user-select:none;-webkit-user-select:none}
+.badge{grid-column:3;margin-right:4px;background:#8f8c9b;color:#fff;border-radius:8px;padding:6px 10px;text-align:center;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums;min-width:44px}
 .badge hr{border:0;border-top:2px solid #fff;margin:5px 0}
 .badge.met{background:var(--violet)}
 .gain{position:absolute;left:88px;top:10px;font-weight:700;color:var(--coin);pointer-events:none;animation:float 1s ease-out forwards}
@@ -131,7 +138,7 @@ input[type=text],input[type=number],select{width:100%;background:var(--surface-2
 .tab[aria-selected=true]{color:var(--fg);background:var(--surface-2)}
 @media (max-width:420px){
   .hero{padding-left:72px}.hero .spark{left:12px;width:46px}
-  .hero h1{font-size:1.2rem}.task{grid-template-columns:66px minmax(0,1fr) auto}
+  .hero h1{font-size:1.2rem}.task{grid-template-columns:66px minmax(0,1fr) auto 44px}
   .task-name{font-size:1.08rem}.stat{font-size:1.1rem}.lvl{font-size:1.2rem}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -256,6 +263,7 @@ function taskRow(t,k){
     <div class="task-body"><div class="task-name">${esc(t.name)}</div>
       <div class="task-meta">${pts}<span>${DIFF[t.diff]}</span>${e.note?`<span>${e.note}</span>`:''}</div></div>
     ${badge}
+    <button class="grip" type="button" aria-label="Drag to reorder ${esc(t.name)}" title="Hold and drag to reorder"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></button>
   </div>`;
 }
 
@@ -397,7 +405,54 @@ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().c
 if('serviceWorker' in navigator) window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 render();
 // keep "today" correct if the app stays open past 4am
-setInterval(()=>{ if(document.visibilityState==='visible' && !document.activeElement?.matches('input,select')) render(); }, 60000);
+setInterval(()=>{ if(!drag && document.visibilityState==='visible' && !document.activeElement?.matches('input,select')) render(); }, 60000);
+
+/* ---------- drag to reorder (grip handle, touch + mouse) ---------- */
+let drag = null;
+const GAP = 12;
+document.addEventListener('pointerdown', e=>{
+  const grip = e.target.closest('.grip'); if(!grip || drag) return;
+  const row = grip.closest('.task'); if(!row) return;
+  e.preventDefault();
+  grip.setPointerCapture(e.pointerId);
+  drag = { row, grip, list: row.parentElement, startY: e.clientY, y: e.clientY, scroll0: window.scrollY, id: e.pointerId, raf: 0 };
+  row.classList.add('dragging'); document.body.classList.add('is-dragging');
+  if(navigator.vibrate) try{ navigator.vibrate(12); }catch(_){}
+  drag.raf = requestAnimationFrame(dragTick);
+});
+document.addEventListener('pointermove', e=>{ if(drag && e.pointerId===drag.id){ e.preventDefault(); drag.y = e.clientY; } }, {passive:false});
+function dragTick(){
+  if(!drag) return;
+  const {row, list} = drag, y = drag.y;
+  // auto-scroll near the screen edges
+  const edge = 90, h = window.innerHeight;
+  if(y < edge) window.scrollBy(0, -Math.ceil((edge - y)/6));
+  else if(y > h - edge - 70) window.scrollBy(0, Math.ceil((y - (h - edge - 70))/6));
+  // swap with neighbours when the finger passes their middle
+  const prev = row.previousElementSibling, next = row.nextElementSibling;
+  if(prev){ const r = prev.getBoundingClientRect(); if(y < r.top + r.height/2){ list.insertBefore(row, prev); drag.startY -= r.height + GAP; } }
+  if(next){ const r = next.getBoundingClientRect(); if(y > r.top + r.height/2){ list.insertBefore(next, row); drag.startY += r.height + GAP; } }
+  const dy = y - drag.startY + (window.scrollY - drag.scroll0);
+  row.style.transform = `translateY(${dy}px)`;
+  drag.raf = requestAnimationFrame(dragTick);
+}
+function endDrag(e){
+  if(!drag || (e && e.pointerId!==drag.id)) return;
+  cancelAnimationFrame(drag.raf);
+  const {row} = drag;
+  row.classList.remove('dragging'); row.style.transform = ''; document.body.classList.remove('is-dragging');
+  drag = null;
+  // new order = daily list then weekly list, as shown on screen
+  const ids = [...document.querySelectorAll('#view-tasks .task')].map(el=>el.dataset.id);
+  const byId = Object.fromEntries(state.tasks.map(t=>[t.id,t]));
+  const reordered = ids.map(id=>byId[id]).filter(Boolean);
+  const missing = state.tasks.filter(t=>!ids.includes(t.id));
+  const changed = reordered.some((t,i)=>t!==state.tasks[i]);
+  if(changed){ state.tasks = reordered.concat(missing); save(); }
+  render();
+}
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', endDrag);
 </script>
 </body>
 </html>
