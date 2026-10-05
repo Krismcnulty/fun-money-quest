@@ -69,7 +69,26 @@ button{cursor:pointer}
 .check svg{width:26px;height:26px;opacity:0;transform:scale(.6);transition:.2s}
 .task.is-done .check{background:var(--done)}
 .task.is-done .check svg{opacity:1;transform:none}
-.task-body{padding:12px 14px 12px 18px;min-width:0}
+.task-body{grid-column:2;align-self:stretch;display:flex;flex-direction:column;justify-content:center;border:0;background:none;text-align:left;padding:12px 14px 12px 18px;min-width:0;cursor:pointer}
+.task-name{display:block}
+.steps{grid-column:1/-1;background:var(--surface-2);border-top:1px solid var(--line);padding:6px 14px 14px;display:grid;gap:2px}
+.step{display:flex;align-items:center;gap:14px;border:0;background:none;padding:10px 6px;text-align:left;font-size:1.05rem;border-radius:10px}
+.step:hover{background:rgba(255,255,255,.03)}
+.step .sbox{width:26px;height:26px;border-radius:7px;border:2px solid var(--muted);display:grid;place-items:center;flex:none;transition:.15s}
+.step .sbox svg{width:16px;height:16px;opacity:0}
+.step.on .sbox{background:var(--violet);border-color:var(--violet)}
+.step.on .sbox svg{opacity:1}
+.step.on span:last-child{color:var(--muted);text-decoration:line-through}
+.steps-empty,.steps-none{color:var(--muted);font-size:.9rem;padding:8px 6px}
+.step-add{display:flex;gap:8px;margin-top:6px;min-width:0}
+.step-add input{flex:1;min-width:0}
+.steps-edit{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.steps-edit .lbl{flex-basis:100%}
+.steps-edit .steps-none{padding:0}
+.steps-edit .step-add{flex-basis:100%;margin-top:2px}
+.chip-step{display:inline-flex;align-items:center;gap:2px;background:var(--surface-2);border-radius:999px;padding:3px 3px 3px 12px;font-size:.92rem;max-width:100%}
+.chip-step button{border:0;background:none;color:var(--muted);width:28px;height:28px;border-radius:50%;font-size:1.15rem;line-height:1;flex:none}
+.chip-step button:hover{color:var(--fg);background:var(--line)}
 .task-name{font-weight:600;font-size:1.2rem;overflow-wrap:anywhere}
 .task.is-done .task-name{color:var(--muted)}
 .task-meta{color:var(--muted);font-size:.85rem;margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
@@ -178,8 +197,8 @@ const TIERS = [5, 10, 20];
 const LS = 'fmq-state-v1';
 
 function defaults(){
-  return { v:1, budget:100, redemptions:[], log:{}, tasks:[
-    {id:'morning', name:'Morning Routine',      diff:'easy',   freq:0},
+  return { v:1, budget:100, redemptions:[], log:{}, checks:{}, tasks:[
+    {id:'morning', name:'Morning Routine',      diff:'easy',   freq:0, steps:[{id:'s1',name:'Brush teeth'},{id:'s2',name:'Wash face'}]},
     {id:'water',   name:'Drink 2.5L Water',     diff:'easy',   freq:0},
     {id:'protein', name:'Hit Protein Target',   diff:'medium', freq:0},
     {id:'cals',    name:'Stay Within Calories', diff:'medium', freq:0},
@@ -194,13 +213,16 @@ function normalize(s){
   const d = defaults();
   if(!s || typeof s!=='object') return d;
   return { v:1, budget: Number(s.budget)>0 ? Number(s.budget) : d.budget,
-    tasks: Array.isArray(s.tasks) ? s.tasks : d.tasks,
+    tasks: (Array.isArray(s.tasks) ? s.tasks : d.tasks).map(t=>({...t, steps: Array.isArray(t.steps) ? t.steps
+      : (t.id==='morning' ? [{id:'s1',name:'Brush teeth'},{id:'s2',name:'Wash face'}] : [])})),
     log: s.log && typeof s.log==='object' ? s.log : {},
+    checks: s.checks && typeof s.checks==='object' ? s.checks : {},
     redemptions: Array.isArray(s.redemptions) ? s.redemptions : [] };
 }
 
 let state = (()=>{ try{ const raw = localStorage.getItem(LS); if(raw){ return normalize(JSON.parse(raw)); } }catch(e){} return defaults(); })();
 let tab = 'tasks', confirmAmt = null, confirmDel = null;
+const open = new Set();   // tasks whose steps are showing
 
 /* ---------- dates (a day runs 4am to 4am) ---------- */
 const pad = n => String(n).padStart(2,'0');
@@ -223,6 +245,7 @@ const balance = () => sumLog(0) - spent();
 const xpTotal = () => sumLog(1);
 const levelOf = xp => Math.floor((1+Math.sqrt(1+4*xp/500))/2);
 const isDone = (t,k) => !!(state.log[k] && state.log[k][t.id]);
+const stepIds = (t,k) => ((state.checks[k] && state.checks[k][t.id]) || []).filter(id => (t.steps||[]).some(s=>s.id===id));
 function weekCount(t,k,excludeToday){ return weekKeys(k).filter(d => !(excludeToday && d===k) && state.log[d] && state.log[d][t.id]).length; }
 function preview(t,k){
   const full = valueOf(t,k); let p = full, note = '';
@@ -255,15 +278,25 @@ function taskRow(t,k){
   const done = isDone(t,k);
   const e = done ? {p:state.log[k][t.id][0], x:state.log[k][t.id][1], note:''} : preview(t,k);
   const c = done ? '' : `var(--${t.diff})`;
-  let badge = '';
-  if(t.freq){ const n = weekCount(t,k,false); badge = `<div class="badge${n>=t.freq?' met':''}" aria-label="${n} of ${t.freq} this week">${n}<hr>${t.freq}</div>`; }
+  const steps = t.steps || [], on = stepIds(t,k), isOpen = open.has(t.id);
+  let badge = '', stepNote = '';
+  if(t.freq){ const n = weekCount(t,k,false); badge = `<div class="badge${n>=t.freq?' met':''}" aria-label="${n} of ${t.freq} this week">${n}<hr>${t.freq}</div>`;
+    if(steps.length) stepNote = `<span>${on.length}/${steps.length} steps</span>`; }
+  else if(steps.length){ badge = `<div class="badge${on.length>=steps.length?' met':''}" aria-label="${on.length} of ${steps.length} steps done">${on.length}<hr>${steps.length}</div>`; }
   const pts = e.p>0 ? `<span class="pts">+${nf(e.p)} pts</span>` : `<span class="pts">+${nf(e.x)} XP</span>`;
-  return `<div class="task${done?' is-done':''}" data-id="${esc(t.id)}" style="--c:${c||'var(--done)'}">
+  const panel = !isOpen ? '' : `<div class="steps">
+      ${steps.length ? steps.map(s=>{ const ok = on.includes(s.id);
+        return `<button class="step${ok?' on':''}" data-act="step" data-id="${esc(t.id)}" data-sid="${esc(s.id)}" aria-pressed="${ok}"><span class="sbox">${tick}</span><span>${esc(s.name)}</span></button>`; }).join('')
+        : '<div class="steps-empty">No steps yet. Add the first one below.</div>'}
+      <form class="step-add" data-id="${esc(t.id)}"><input type="text" id="tadd-${esc(t.id)}" placeholder="Add a step" maxlength="50" aria-label="Add a step to ${esc(t.name)}"><button class="btn small ghost">Add</button></form>
+    </div>`;
+  return `<div class="task${done?' is-done':''}${isOpen?' is-open':''}" data-id="${esc(t.id)}" style="--c:${c||'var(--done)'}">
     <button class="check" data-act="toggle" data-id="${esc(t.id)}" aria-pressed="${done}" aria-label="${done?'Undo':'Complete'} ${esc(t.name)}"><span class="box">${tick}</span></button>
-    <div class="task-body"><div class="task-name">${esc(t.name)}</div>
-      <div class="task-meta">${pts}<span>${DIFF[t.diff]}</span>${e.note?`<span>${e.note}</span>`:''}</div></div>
+    <button class="task-body" data-act="expand" data-id="${esc(t.id)}" aria-expanded="${isOpen}"><span class="task-name">${esc(t.name)}</span>
+      <span class="task-meta">${pts}<span>${DIFF[t.diff]}</span>${stepNote}${e.note?`<span>${e.note}</span>`:''}</span></button>
     ${badge}
     <button class="grip" type="button" aria-label="Drag to reorder ${esc(t.name)}" title="Hold and drag to reorder"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></button>
+    ${panel}
   </div>`;
 }
 
@@ -319,6 +352,10 @@ function renderSetup(k){
         <select id="diff-${esc(t.id)}" data-act="diff" data-i="${i}" aria-label="Difficulty">${opts(t.diff)}</select>
         <select id="freq-${esc(t.id)}" data-act="freq" data-i="${i}" aria-label="How often">${fopts(t.freq)}</select>
       </div>
+      <div class="steps-edit"><span class="lbl">Steps</span>
+        ${(t.steps||[]).map(s=>`<span class="chip-step">${esc(s.name)}<button type="button" data-act="delstep" data-id="${esc(t.id)}" data-sid="${esc(s.id)}" aria-label="Remove step ${esc(s.name)}">×</button></span>`).join('') || '<span class="steps-none">None — this task is a single tick</span>'}
+        <form class="step-add" data-id="${esc(t.id)}"><input type="text" id="sadd-${esc(t.id)}" placeholder="Add a step" maxlength="50" aria-label="Add a step to ${esc(t.name)}"><button class="btn small ghost">Add</button></form>
+      </div>
       <div class="edit-foot"><span class="val"><b>${nf(valueOf(t,k))} pts</b> each · £${share.toFixed(2)} of the month</span>
         ${confirmDel===t.id?`<button class="btn small danger" data-act="del" data-i="${i}">Delete</button><button class="btn small ghost" data-act="cancel">Keep</button>`
           :`<button class="btn small ghost" data-act="askdel" data-id="${esc(t.id)}">Remove</button>`}</div>
@@ -346,12 +383,38 @@ function floatGain(id, e){
     s.textContent = e.p>0 ? '+' + nf(e.p) : '+' + nf(e.x) + ' XP'; row.appendChild(s); setTimeout(()=>s.remove(), 1000); }
   const c = document.getElementById('coinStat'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump');
 }
+function complete(t,k){ const day = state.log[k] || (state.log[k] = {}); const e = preview(t,k); day[t.id] = [e.p, e.x]; return e; }
+function uncomplete(t,k){ const day = state.log[k]; if(!day) return; delete day[t.id]; if(!Object.keys(day).length) delete state.log[k]; }
+function setChecks(t,k,ids){ const d = state.checks[k] || (state.checks[k] = {}); if(ids.length) d[t.id] = ids; else { delete d[t.id]; if(!Object.keys(d).length) delete state.checks[k]; } }
 function toggle(id){
   const t = state.tasks.find(x=>x.id===id); if(!t) return;
-  const k = todayKey(), day = state.log[k] || (state.log[k] = {});
-  if(day[id]){ delete day[id]; if(!Object.keys(day).length) delete state.log[k]; render(); save(); return; }
-  const e = preview(t,k); day[id] = [e.p, e.x]; render(); floatGain(id, e); save();
+  const k = todayKey();
+  if(isDone(t,k)){ uncomplete(t,k); setChecks(t,k,[]); render(); save(); return; }
+  if((t.steps||[]).length) setChecks(t,k,t.steps.map(s=>s.id));
+  const e = complete(t,k); render(); floatGain(id, e); save();
 }
+function toggleStep(id, sid){
+  const t = state.tasks.find(x=>x.id===id); if(!t) return;
+  const k = todayKey(), cur = stepIds(t,k);
+  const next = cur.includes(sid) ? cur.filter(x=>x!==sid) : cur.concat(sid);
+  setChecks(t,k,next);
+  const all = t.steps.length > 0 && t.steps.every(s=>next.includes(s.id));
+  let gained = null;
+  if(all && !isDone(t,k)) gained = complete(t,k);
+  else if(!all && isDone(t,k)) uncomplete(t,k);
+  render(); if(gained){ floatGain(id, gained); if(navigator.vibrate) try{ navigator.vibrate(20); }catch(_){} } save();
+}
+document.addEventListener('submit', ev=>{
+  const f = ev.target.closest('.step-add'); if(!f) return;
+  ev.preventDefault();
+  const input = f.querySelector('input'), name = input.value.trim(); if(!name) return;
+  const t = state.tasks.find(x=>x.id===f.dataset.id); if(!t) return;
+  (t.steps || (t.steps = [])).push({id:'s'+Math.random().toString(36).slice(2,8), name});
+  // a new unticked step means the routine isn't finished any more
+  const k = todayKey(); if(isDone(t,k) && stepIds(t,k).length) uncomplete(t,k);
+  save(); render();
+  const again = document.getElementById(input.id); if(again) again.focus();
+});
 
 document.addEventListener('click', ev=>{
   const b = ev.target.closest('[data-act],[data-tab]'); if(!b) return;
@@ -361,6 +424,9 @@ document.addEventListener('click', ev=>{
   if(a==='export'){ exportBackup(); return; }
   if(a==='restore'){ if(restorePending){ state = normalize(restorePending.data); restorePending = null; save(); render(); toast('Backup restored'); } return; }
   if(a==='toggle') toggle(b.dataset.id);
+  else if(a==='expand'){ const id = b.dataset.id; open.has(id) ? open.delete(id) : open.add(id); render(); }
+  else if(a==='step') toggleStep(b.dataset.id, b.dataset.sid);
+  else if(a==='delstep'){ const t = state.tasks.find(x=>x.id===b.dataset.id); if(t){ t.steps = t.steps.filter(s=>s.id!==b.dataset.sid); save(); render(); } }
   else if(a==='ask'){ confirmAmt = +b.dataset.amt; render(); }
   else if(a==='cancel'){ confirmAmt = confirmDel = restorePending = null; render(); }
   else if(a==='redeem'){ const amt = +b.dataset.amt, cost = amt*RATE;
@@ -368,7 +434,7 @@ document.addEventListener('click', ev=>{
     confirmAmt = null; render(); }
   else if(a==='moved'){ const r = state.redemptions[+b.dataset.i]; if(r){ r.moved = true; save(); render(); } }
   else if(a==='add'){ const id = 't' + Math.random().toString(36).slice(2,8);
-    state.tasks.push({id, name:'New Task', diff:'easy', freq:0}); save(); render();
+    state.tasks.push({id, name:'New Task', diff:'easy', freq:0, steps:[]}); save(); render();
     const el = document.getElementById('name-'+id); if(el){ el.focus(); el.select(); } }
   else if(a==='askdel'){ confirmDel = b.dataset.id; render(); }
   else if(a==='del'){ state.tasks.splice(+b.dataset.i,1); confirmDel = null; save(); render(); }
@@ -385,7 +451,9 @@ document.addEventListener('change', ev=>{
 
 /* ---------- saving: this phone, with backup files ---------- */
 let restorePending = null;
-function save(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){ toast('Couldn’t save — is storage full or blocked?'); } }
+function save(){
+  const cutoff = keyOf(new Date(Date.now() - 14*864e5)); for(const k in state.checks) if(k < cutoff) delete state.checks[k];
+  try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){ toast('Couldn’t save — is storage full or blocked?'); } }
 function toast(msg){ const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role','status'); t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 2600); }
 function exportBackup(){
   const blob = new Blob([JSON.stringify({app:'fun-money-quest', saved:new Date().toISOString(), state}, null, 2)], {type:'application/json'});
