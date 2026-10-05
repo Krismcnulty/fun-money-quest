@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17161d">
+<meta name="description" content="Do real-life tasks, earn points, redeem them for your fun money.">
+<title>Fun Money Quest</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one phone-width column — stat bar, glowing "today" card, chunky tappable task rows; tab bar pinned to the bottom */
+:root{
+  color-scheme: dark;
+  --bg:#17161d; --surface:#23222b; --surface-2:#2e2d38; --line:#3b3947;
+  --fg:#f3f1f8; --muted:#9b98a9; --dim:#6f6c7d;
+  --coin:#f4ab3c; --coin-deep:#c27a12; --cash:#4fd6a8; --violet:#8b5cf6; --sky:#a6d8f5; --rose:#f2aec0;
+  --easy:#3f9fd9; --medium:#d9a32e; --hard:#e3773a; --epic:#d24c47; --done:#4a4857;
+  --font:'Rubik',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+html,body{background:var(--bg);color:var(--fg);margin:0}
+html{padding-top:env(safe-area-inset-top,0px)}
+img{max-width:100%}[hidden]{display:none!important}
+body{font-family:var(--font);font-size:16px;line-height:1.4;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+.app{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:20px calc(104px + env(safe-area-inset-bottom,0px))}
+
+/* stat bar */
+.stats{display:flex;align-items:center;gap:16px;margin-bottom:22px}
+.lvl{font-weight:700;font-size:1.35rem;margin-right:auto;letter-spacing:.01em}
+.stat{display:flex;align-items:center;gap:8px;font-weight:600;font-size:1.25rem;font-variant-numeric:tabular-nums}
+.stat.coin{color:var(--coin)}
+.stat.cash{color:var(--cash)}
+.stat.cash small{color:var(--muted);font-weight:500;font-size:.85rem}
+.stat svg{width:28px;height:28px;flex:none}
+.bump{animation:bump .45s ease}
+@keyframes bump{30%{transform:scale(1.18)}}
+
+/* today card */
+.hero{position:relative;border:3px solid transparent;border-radius:20px;padding:20px 18px 18px 84px;
+  background:linear-gradient(var(--surface),var(--surface)) padding-box,linear-gradient(90deg,var(--sky),var(--violet) 55%,var(--rose)) border-box;
+  margin-bottom:26px;overflow:hidden}
+.hero .spark{position:absolute;left:18px;top:50%;transform:translateY(-50%);width:54px;height:62px}
+.hero .deco{position:absolute;inset:0;pointer-events:none;opacity:.35}
+.hero-top{display:flex;align-items:center;gap:12px;position:relative}
+.hero h1{font-size:1.4rem;font-weight:700;margin:0;margin-right:auto;text-wrap:balance}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border-radius:999px;padding:5px 12px 5px 6px;font-weight:600;font-size:1.15rem;font-variant-numeric:tabular-nums}
+.chip svg{width:26px;height:26px}
+.hero-bar{display:flex;align-items:center;gap:14px;margin-top:14px;position:relative}
+.bar{flex:1;height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar > i{display:block;height:100%;background:var(--violet);border-radius:99px;transition:width .35s ease}
+.hero-count{color:#c0abff;font-weight:700;font-size:1.25rem;font-variant-numeric:tabular-nums;min-width:3.2em;text-align:right}
+
+/* sections */
+.section-h{display:flex;justify-content:space-between;align-items:baseline;margin:6px 4px 10px;color:var(--muted);font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.09em}
+.list{display:grid;gap:12px;margin-bottom:24px}
+
+/* task rows */
+.task{position:relative;display:grid;grid-template-columns:76px minmax(0,1fr) auto;align-items:center;min-height:80px;background:var(--surface);border-radius:16px;overflow:hidden}
+.check{align-self:stretch;border:0;display:grid;place-items:center;background:var(--c);transition:background .2s}
+.check .box{width:44px;height:44px;border-radius:10px;background:rgba(0,0,0,.22);display:grid;place-items:center}
+.check svg{width:26px;height:26px;opacity:0;transform:scale(.6);transition:.2s}
+.task.is-done .check{background:var(--done)}
+.task.is-done .check svg{opacity:1;transform:none}
+.task-body{padding:12px 14px 12px 18px;min-width:0}
+.task-name{font-weight:600;font-size:1.2rem;overflow-wrap:anywhere}
+.task.is-done .task-name{color:var(--muted)}
+.task-meta{color:var(--muted);font-size:.85rem;margin-top:2px;display:flex;gap:10px;flex-wrap:wrap}
+.task-meta .pts{color:var(--coin);font-weight:600}
+.task.is-done .task-meta .pts{color:var(--dim)}
+.badge{margin-right:16px;background:#8f8c9b;color:#fff;border-radius:8px;padding:6px 10px;text-align:center;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums;min-width:44px}
+.badge hr{border:0;border-top:2px solid #fff;margin:5px 0}
+.badge.met{background:var(--violet)}
+.gain{position:absolute;left:88px;top:10px;font-weight:700;color:var(--coin);pointer-events:none;animation:float 1s ease-out forwards}
+.gain.xp{color:#c0abff}
+@keyframes float{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-34px)}}
+
+/* panels */
+.panel{background:var(--surface);border-radius:16px;padding:18px;margin-bottom:16px}
+.panel h2{font-size:1.15rem;margin:0 0 4px}
+.panel p{margin:0;color:var(--muted);font-size:.92rem;max-width:62ch}
+.big{font-size:2rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--coin);display:flex;align-items:center;gap:10px;margin:6px 0 2px}
+.big svg{width:34px;height:34px}
+.tier{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:16px;padding:14px 16px;flex-wrap:wrap}
+.tier-amt{font-size:1.5rem;font-weight:700;color:var(--cash);min-width:3.2em}
+.tier-info{flex:1;min-width:0}
+.tier-info .bar{margin-top:8px}
+.tier-info .bar > i{background:var(--coin)}
+.btn{border:0;border-radius:12px;padding:11px 18px;font-weight:600;background:var(--violet);color:#fff}
+.btn:disabled{background:var(--surface-2);color:var(--dim);cursor:not-allowed}
+.btn.ghost{background:var(--surface-2);color:var(--fg)}
+.btn.danger{background:var(--epic)}
+.btn.small{padding:7px 12px;font-size:.9rem}
+.confirm{flex-basis:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:.92rem;padding-top:4px}
+.confirm span{flex:1;min-width:12em}
+.hist{display:grid;gap:8px;margin-top:10px}
+.hist-row{display:flex;align-items:center;gap:12px;background:var(--surface-2);border-radius:12px;padding:10px 12px;flex-wrap:wrap}
+.hist-row b{color:var(--cash);min-width:3em}
+.hist-row span{flex:1;color:var(--muted);font-size:.9rem;min-width:8em}
+.tag{font-size:.8rem;font-weight:600;color:var(--cash)}
+
+/* setup */
+.field{display:grid;gap:6px;margin-top:12px}
+.field label,.lbl{font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+input[type=text],input[type=number],select{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.money{display:flex;align-items:center;gap:8px;max-width:200px}
+.money b{font-size:1.3rem;color:var(--cash)}
+.edit{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;background:var(--surface);border-radius:16px;padding:14px;border-left:8px solid var(--c)}
+.edit-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;grid-column:1/-1}
+.edit-foot{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:.9rem}
+.edit-foot .val{margin-right:auto}
+.edit-foot .val b{color:var(--coin)}
+.sync{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem;margin:4px 4px 16px}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.sync.cloud i{background:var(--cash)}
+.sync.connecting i{background:var(--coin)}
+.sync small{color:var(--dim)}
+
+/* tab bar */
+.tabs{position:fixed;left:0;right:0;bottom:0;background:#1d1c24;border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));z-index:5}
+.tabs-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tab{border:0;background:none;border-radius:12px;padding:10px 6px;font-weight:600;color:var(--muted);display:grid;justify-items:center;gap:3px;font-size:.85rem}
+.tab svg{width:24px;height:24px}
+.tab[aria-selected=true]{color:var(--fg);background:var(--surface-2)}
+@media (max-width:420px){
+  .hero{padding-left:72px}.hero .spark{left:12px;width:46px}
+  .hero h1{font-size:1.2rem}.task{grid-template-columns:66px minmax(0,1fr) auto}
+  .task-name{font-size:1.08rem}.stat{font-size:1.1rem}.lvl{font-size:1.2rem}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--surface-2);border:1px solid var(--line);padding:10px 16px;border-radius:12px;font-size:.92rem;z-index:9;max-width:calc(100% - 32px)}
+.backup-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="stats">
+    <div class="lvl" id="lvl">Lvl. 1</div>
+    <div class="stat coin" id="coinStat"></div>
+    <div class="stat cash" id="cashStat"></div>
+  </header>
+
+  <main>
+    <section id="view-tasks"></section>
+    <section id="view-rewards" hidden></section>
+    <section id="view-setup" hidden></section>
+  </main>
+</div>
+
+<nav class="tabs" aria-label="Sections">
+  <div class="tabs-in" role="tablist">
+    <button class="tab" role="tab" data-tab="tasks" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7.5 12 3 3 6-6"/></svg>Tasks</button>
+    <button class="tab" role="tab" data-tab="rewards" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8S10.5 3 7.8 3.6C5.5 4.1 6.6 8 12 8Zm0 0s1.5-5 4.2-4.4C18.5 4.1 17.4 8 12 8Z"/></svg>Rewards</button>
+    <button class="tab" role="tab" data-tab="setup" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Setup</button>
+  </div>
+</nav>
+
+<script>
+const RATE = 100;                                   // 100 points = £1
+const WEIGHTS = {easy:1, medium:2, hard:4, epic:8};
+const DIFF = {easy:'Easy', medium:'Medium', hard:'Hard', epic:'Epic'};
+const TIERS = [5, 10, 20];
+const LS = 'fmq-state-v1';
+
+function defaults(){
+  return { v:1, budget:100, redemptions:[], log:{}, tasks:[
+    {id:'morning', name:'Morning Routine',      diff:'easy',   freq:0},
+    {id:'water',   name:'Drink 2.5L Water',     diff:'easy',   freq:0},
+    {id:'protein', name:'Hit Protein Target',   diff:'medium', freq:0},
+    {id:'cals',    name:'Stay Within Calories', diff:'medium', freq:0},
+    {id:'read',    name:'Read a Chapter',       diff:'medium', freq:0},
+    {id:'night',   name:'Night Routine',        diff:'easy',   freq:0},
+    {id:'nopmo',   name:'No PMO',               diff:'hard',   freq:0},
+    {id:'gym',     name:'Gym Session',          diff:'epic',   freq:4},
+    {id:'hike',    name:'Weekend Hike',         diff:'medium', freq:1},
+  ]};
+}
+function normalize(s){
+  const d = defaults();
+  if(!s || typeof s!=='object') return d;
+  return { v:1, budget: Number(s.budget)>0 ? Number(s.budget) : d.budget,
+    tasks: Array.isArray(s.tasks) ? s.tasks : d.tasks,
+    log: s.log && typeof s.log==='object' ? s.log : {},
+    redemptions: Array.isArray(s.redemptions) ? s.redemptions : [] };
+}
+
+let state = (()=>{ try{ const raw = localStorage.getItem(LS); if(raw){ return normalize(JSON.parse(raw)); } }catch(e){} return defaults(); })();
+let tab = 'tasks', confirmAmt = null, confirmDel = null;
+
+/* ---------- dates (a day runs 4am to 4am) ---------- */
+const pad = n => String(n).padStart(2,'0');
+const keyOf = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const todayKey = () => keyOf(new Date(Date.now() - 4*36e5));
+const dateOf = k => { const [y,m,d] = k.split('-').map(Number); return new Date(y, m-1, d, 12); };
+const daysInMonth = k => { const [y,m] = k.split('-').map(Number); return new Date(y, m, 0).getDate(); };
+function weekKeys(k){ const d = dateOf(k), dow = (d.getDay()+6)%7, out = [];
+  for(let i=0;i<=dow;i++){ const x = new Date(d); x.setDate(d.getDate()-dow+i); out.push(keyOf(x)); } return out; }
+const fmtDate = iso => new Date(iso).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+
+/* ---------- maths ---------- */
+const totalWeight = () => state.tasks.reduce((s,t)=>s+(WEIGHTS[t.diff]||1),0) || 1;
+const planned = (t,k) => t.freq ? t.freq*daysInMonth(k)/7 : daysInMonth(k);
+const valueOf = (t,k) => Math.max(1, Math.round(state.budget*RATE*(WEIGHTS[t.diff]||1)/totalWeight()/planned(t,k)));
+function sumLog(idx, filter){ let s=0; for(const k in state.log){ if(filter && !filter(k)) continue; for(const id in state.log[k]) s += state.log[k][id][idx]||0; } return s; }
+const monthEarned = k => sumLog(0, d => d.slice(0,7)===k.slice(0,7));
+const spent = () => state.redemptions.reduce((s,r)=>s+r.p,0);
+const balance = () => sumLog(0) - spent();
+const xpTotal = () => sumLog(1);
+const levelOf = xp => Math.floor((1+Math.sqrt(1+4*xp/500))/2);
+const isDone = (t,k) => !!(state.log[k] && state.log[k][t.id]);
+function weekCount(t,k,excludeToday){ return weekKeys(k).filter(d => !(excludeToday && d===k) && state.log[d] && state.log[d][t.id]).length; }
+function preview(t,k){
+  const full = valueOf(t,k); let p = full, note = '';
+  if(t.freq && weekCount(t,k,true) >= t.freq){ p = 0; note = 'Weekly goal met · XP only'; }
+  const room = Math.max(0, state.budget*RATE - monthEarned(k));
+  if(p > room){ p = room; if(p===0) note = 'Monthly budget reached · XP only'; }
+  return {p, x:full, note};
+}
+const nf = n => n.toLocaleString('en-GB');
+const money = p => '£' + (p/RATE).toFixed(2).replace(/\.00$/,'');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- icons ---------- */
+const coin = () => '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--coin)"/><circle cx="16" cy="16" r="10.5" fill="none" stroke="var(--coin-deep)" stroke-width="2"/><path d="M16 9.5l1.9 4 4.3.5-3.2 2.9.9 4.3-3.9-2.2-3.9 2.2.9-4.3-3.2-2.9 4.3-.5z" fill="var(--coin-deep)"/></svg>';
+const tick = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+const spark = '<svg class="spark" viewBox="0 0 54 62" aria-hidden="true"><path d="M20 4l4.2 13.8L38 22l-13.8 4.2L20 40l-4.2-13.8L2 22l13.8-4.2z" fill="var(--violet)"/><path d="M44 20l1.8 5.2L51 27l-5.2 1.8L44 34l-1.8-5.2L37 27l5.2-1.8z" fill="#5fb6e0"/><path d="M28 40l2.6 7.4L38 50l-7.4 2.6L28 60l-2.6-7.4L18 50l7.4-2.6z" fill="var(--epic)"/></svg>';
+const deco = '<svg class="deco" viewBox="0 0 400 110" preserveAspectRatio="none" aria-hidden="true" fill="none" stroke="var(--muted)" stroke-width="1.6"><path d="M268 22l14 4-4 14-14-4z"/><path d="M300 70c4-4 0-8 4-12"/><path d="M330 30c5 2 2 8 7 10"/><path d="M360 78l12-3 3 12-12 3z"/><path d="M240 84c3-5 8-2 10-7"/></svg>';
+
+/* ---------- render ---------- */
+function render(){
+  const k = todayKey();
+  document.getElementById('lvl').textContent = 'Lvl. ' + levelOf(xpTotal());
+  document.getElementById('coinStat').innerHTML = coin() + '<span>' + nf(balance()) + '</span>';
+  document.getElementById('cashStat').innerHTML = '<span>' + money(monthEarned(k)) + '</span><small>/ £' + nf(state.budget) + '</small>';
+  document.getElementById('cashStat').title = 'Earned this month out of your budget';
+  renderTasks(k); renderRewards(k); renderSetup(k);
+}
+
+function taskRow(t,k){
+  const done = isDone(t,k);
+  const e = done ? {p:state.log[k][t.id][0], x:state.log[k][t.id][1], note:''} : preview(t,k);
+  const c = done ? '' : `var(--${t.diff})`;
+  let badge = '';
+  if(t.freq){ const n = weekCount(t,k,false); badge = `<div class="badge${n>=t.freq?' met':''}" aria-label="${n} of ${t.freq} this week">${n}<hr>${t.freq}</div>`; }
+  const pts = e.p>0 ? `<span class="pts">+${nf(e.p)} pts</span>` : `<span class="pts">+${nf(e.x)} XP</span>`;
+  return `<div class="task${done?' is-done':''}" data-id="${esc(t.id)}" style="--c:${c||'var(--done)'}">
+    <button class="check" data-act="toggle" data-id="${esc(t.id)}" aria-pressed="${done}" aria-label="${done?'Undo':'Complete'} ${esc(t.name)}"><span class="box">${tick}</span></button>
+    <div class="task-body"><div class="task-name">${esc(t.name)}</div>
+      <div class="task-meta">${pts}<span>${DIFF[t.diff]}</span>${e.note?`<span>${e.note}</span>`:''}</div></div>
+    ${badge}
+  </div>`;
+}
+
+function renderTasks(k){
+  const daily = state.tasks.filter(t=>!t.freq), weekly = state.tasks.filter(t=>t.freq);
+  const doneDaily = daily.filter(t=>isDone(t,k)).length;
+  const today = state.log[k] ? Object.values(state.log[k]).reduce((s,v)=>s+v[0],0) : 0;
+  const pct = daily.length ? doneDaily/daily.length*100 : 0;
+  const dayName = dateOf(k).toLocaleDateString('en-GB',{weekday:'long'});
+  document.getElementById('view-tasks').innerHTML = `
+    <div class="hero">${deco}${spark}
+      <div class="hero-top"><h1>${dayName}'s Objectives</h1><span class="chip" title="Points earned today">${coin()}${nf(today)}</span></div>
+      <div class="hero-bar"><div class="bar"><i style="width:${pct}%"></i></div><div class="hero-count">${doneDaily} / ${daily.length}</div></div>
+    </div>
+    ${daily.length?`<div class="section-h"><span>Daily</span><span>Resets 4am</span></div><div class="list">${daily.map(t=>taskRow(t,k)).join('')}</div>`:''}
+    ${weekly.length?`<div class="section-h"><span>This week</span><span>Mon – Sun</span></div><div class="list">${weekly.map(t=>taskRow(t,k)).join('')}</div>`:''}
+    ${!state.tasks.length?`<div class="panel"><h2>No tasks yet</h2><p>Add your first task in Setup. Pick a difficulty and the app works out what it's worth.</p></div>`:''}`;
+}
+
+function renderRewards(k){
+  const bal = balance();
+  const tiers = TIERS.map(a=>{
+    const cost = a*RATE, ok = bal>=cost, pct = Math.min(100, bal/cost*100);
+    const conf = confirmAmt===a ? `<div class="confirm"><span>Spend ${nf(cost)} pts on £${a}? Afterwards, move £${a} into your Revolut gaming card.</span>
+      <button class="btn small" data-act="redeem" data-amt="${a}">Redeem</button><button class="btn small ghost" data-act="cancel">Cancel</button></div>` : '';
+    return `<div class="tier"><div class="tier-amt">£${a}</div>
+      <div class="tier-info"><div style="font-weight:600">${nf(cost)} pts</div><div class="bar"><i style="width:${pct}%"></i></div></div>
+      <button class="btn" data-act="ask" data-amt="${a}" ${ok?'':'disabled'}>${ok?'Redeem':nf(cost-bal)+' to go'}</button>${conf}</div>`;
+  }).join('');
+  const hist = [...state.redemptions].map((r,i)=>({...r,i})).reverse().map(r=>`
+    <div class="hist-row"><b>£${r.a}</b><span>${fmtDate(r.d)} · ${nf(r.p)} pts</span>
+      ${r.moved?'<span class="tag">Moved to Revolut</span>':`<button class="btn small ghost" data-act="moved" data-i="${r.i}">Mark as moved</button>`}</div>`).join('');
+  document.getElementById('view-rewards').innerHTML = `
+    <div class="panel"><h2>Available to redeem</h2>
+      <div class="big">${coin()}${nf(bal)} <span style="color:var(--cash);font-size:1.3rem">= ${money(bal)}</span></div>
+      <p>Earned this month: ${money(monthEarned(k))} of your £${nf(state.budget)} budget. Anything past the budget still earns XP.</p></div>
+    <div class="section-h"><span>Rewards</span><span>100 pts = £1</span></div>
+    <div class="list">${tiers}</div>
+    <div class="section-h"><span>History</span></div>
+    <div class="panel">${hist?`<div class="hist" style="margin-top:0">${hist}</div>`:'<p>No redemptions yet. Your first £5 is 500 points away from zero.</p>'}</div>`;
+}
+
+function renderSetup(k){
+  const opts = (cur)=>Object.keys(DIFF).map(d=>`<option value="${d}"${d===cur?' selected':''}>${DIFF[d]}</option>`).join('');
+  const fopts = (cur)=>['<option value="0"'+(cur?'':' selected')+'>Every day</option>'].concat([1,2,3,4,5,6].map(n=>`<option value="${n}"${cur===n?' selected':''}>${n}× a week</option>`)).join('');
+  const W = totalWeight();
+  const rows = state.tasks.map((t,i)=>{
+    const share = state.budget*(WEIGHTS[t.diff]||1)/W;
+    return `<div class="edit" style="--c:var(--${t.diff})">
+      <input type="text" id="name-${esc(t.id)}" value="${esc(t.name)}" data-act="name" data-i="${i}" aria-label="Task name" maxlength="40">
+      <span></span>
+      <div class="edit-row">
+        <select id="diff-${esc(t.id)}" data-act="diff" data-i="${i}" aria-label="Difficulty">${opts(t.diff)}</select>
+        <select id="freq-${esc(t.id)}" data-act="freq" data-i="${i}" aria-label="How often">${fopts(t.freq)}</select>
+      </div>
+      <div class="edit-foot"><span class="val"><b>${nf(valueOf(t,k))} pts</b> each · £${share.toFixed(2)} of the month</span>
+        ${confirmDel===t.id?`<button class="btn small danger" data-act="del" data-i="${i}">Delete</button><button class="btn small ghost" data-act="cancel">Keep</button>`
+          :`<button class="btn small ghost" data-act="askdel" data-id="${esc(t.id)}">Remove</button>`}</div>
+    </div>`;}).join('');
+  document.getElementById('view-setup').innerHTML = `
+    <div class="sync cloud"><i></i><span>Saved on this phone</span></div>
+    <div class="panel"><h2>Monthly fun budget</h2><p>The most you can earn in a month. Every task gets a slice of it based on difficulty, then that slice is split by how often you do it.</p>
+      <div class="field"><label for="budget">Budget</label><div class="money"><b>£</b><input type="number" id="budget" min="1" max="2000" step="1" value="${state.budget}" data-act="budget"></div></div></div>
+    <div class="section-h"><span>Tasks</span><span>Easy 1 · Med 2 · Hard 4 · Epic 8</span></div>
+    <div class="list">${rows}</div>
+    <button class="btn" data-act="add" style="width:100%">Add a task</button>
+    <div class="section-h" style="margin-top:28px"><span>Backup</span></div>
+    <div class="panel"><h2>Keep your progress safe</h2><p>Your points live on this phone. Save a backup file now and then, especially before changing phones or clearing browser data.</p>
+      <div class="backup-btns"><button class="btn" data-act="export">Save backup</button>
+      <label class="btn ghost" for="importFile" style="cursor:pointer">Restore backup</label>
+      <input type="file" id="importFile" accept="application/json,.json" hidden></div>
+      ${restorePending?`<div class="confirm"><span>Replace everything with the backup from ${esc(restorePending.when)}? Your current progress will be overwritten.</span><button class="btn small danger" data-act="restore">Replace</button><button class="btn small ghost" data-act="cancel">Cancel</button></div>`:''}
+    </div>`;
+}
+
+/* ---------- actions ---------- */
+function floatGain(id, e){
+  const row = document.querySelector(`#view-tasks .task[data-id="${CSS.escape(id)}"]`);
+  if(row){ const s = document.createElement('span'); s.className = 'gain' + (e.p>0?'':' xp');
+    s.textContent = e.p>0 ? '+' + nf(e.p) : '+' + nf(e.x) + ' XP'; row.appendChild(s); setTimeout(()=>s.remove(), 1000); }
+  const c = document.getElementById('coinStat'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump');
+}
+function toggle(id){
+  const t = state.tasks.find(x=>x.id===id); if(!t) return;
+  const k = todayKey(), day = state.log[k] || (state.log[k] = {});
+  if(day[id]){ delete day[id]; if(!Object.keys(day).length) delete state.log[k]; render(); save(); return; }
+  const e = preview(t,k); day[id] = [e.p, e.x]; render(); floatGain(id, e); save();
+}
+
+document.addEventListener('click', ev=>{
+  const b = ev.target.closest('[data-act],[data-tab]'); if(!b) return;
+  if(b.dataset.tab){ tab = b.dataset.tab; document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected', x===b));
+    ['tasks','rewards','setup'].forEach(v=>document.getElementById('view-'+v).hidden = v!==tab); confirmAmt = confirmDel = restorePending = null; render(); window.scrollTo(0,0); return; }
+  const a = b.dataset.act;
+  if(a==='export'){ exportBackup(); return; }
+  if(a==='restore'){ if(restorePending){ state = normalize(restorePending.data); restorePending = null; save(); render(); toast('Backup restored'); } return; }
+  if(a==='toggle') toggle(b.dataset.id);
+  else if(a==='ask'){ confirmAmt = +b.dataset.amt; render(); }
+  else if(a==='cancel'){ confirmAmt = confirmDel = restorePending = null; render(); }
+  else if(a==='redeem'){ const amt = +b.dataset.amt, cost = amt*RATE;
+    if(balance()>=cost){ state.redemptions.push({d:new Date().toISOString(), a:amt, p:cost, moved:false}); save(); }
+    confirmAmt = null; render(); }
+  else if(a==='moved'){ const r = state.redemptions[+b.dataset.i]; if(r){ r.moved = true; save(); render(); } }
+  else if(a==='add'){ const id = 't' + Math.random().toString(36).slice(2,8);
+    state.tasks.push({id, name:'New Task', diff:'easy', freq:0}); save(); render();
+    const el = document.getElementById('name-'+id); if(el){ el.focus(); el.select(); } }
+  else if(a==='askdel'){ confirmDel = b.dataset.id; render(); }
+  else if(a==='del'){ state.tasks.splice(+b.dataset.i,1); confirmDel = null; save(); render(); }
+});
+document.addEventListener('change', ev=>{
+  const el = ev.target, a = el.dataset.act; if(!a) return;
+  if(a==='budget'){ const v = Math.round(+el.value); if(v>0){ state.budget = Math.min(v,2000); save(); } render(); return; }
+  const t = state.tasks[+el.dataset.i]; if(!t) return;
+  if(a==='name'){ t.name = el.value.trim() || 'Untitled Task'; }
+  if(a==='diff'){ t.diff = el.value; }
+  if(a==='freq'){ t.freq = +el.value; }
+  save(); render();
+});
+
+/* ---------- saving: this phone, with backup files ---------- */
+let restorePending = null;
+function save(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){ toast('Couldn’t save — is storage full or blocked?'); } }
+function toast(msg){ const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role','status'); t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 2600); }
+function exportBackup(){
+  const blob = new Blob([JSON.stringify({app:'fun-money-quest', saved:new Date().toISOString(), state}, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'fun-money-quest-backup-' + todayKey() + '.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000); toast('Backup saved to your downloads');
+}
+document.addEventListener('change', ev=>{
+  if(ev.target.id!=='importFile' || !ev.target.files[0]) return;
+  const r = new FileReader();
+  r.onload = ()=>{ try{ const j = JSON.parse(r.result); const data = j.state || j;
+      if(!data || !Array.isArray(data.tasks)) throw 0;
+      restorePending = {data, when: j.saved ? fmtDate(j.saved) : 'that file'}; render();
+    }catch(e){ toast('That file isn’t a Fun Money Quest backup'); } };
+  r.readAsText(ev.target.files[0]); ev.target.value = '';
+});
+if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+if('serviceWorker' in navigator) window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+render();
+// keep "today" correct if the app stays open past 4am
+setInterval(()=>{ if(document.visibilityState==='visible' && !document.activeElement?.matches('input,select')) render(); }, 60000);
+</script>
+</body>
+</html>
